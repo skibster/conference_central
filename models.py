@@ -128,3 +128,8 @@ class SessionForm(messages.Message):
     speaker              = messages.StringField(6)
     startTime            = messages.StringField(7)
     typeOfSession        = messages.StringField(8, repeated=True)
+
+class SessionForms(messages.Message):
+    """SessionForms -- multiple Session outbound form message"""
+    items = messages.MessageField(SessionForm, 1, repeated=True)
+
