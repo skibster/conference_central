@@ -39,6 +39,7 @@ from models import TeeShirtSize
 from models import Session
 from models import SessionForm
 from models import SessionForms
+from models import SessionsByType
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -646,5 +647,32 @@ class ConferenceApi(remote.Service):
             items=[self._copySessionToForm(session) for session in sessions]
         )
 
+
+    @endpoints.method(SessionsByType, SessionForms,
+            path='getConferenceSessionsByType',
+            http_method='GET', name='getConferenceSessionsByType')
+    def getConferenceSessions(self, request):
+        """Return sessions for a Conference by Type."""
+        # make sure user is authed
+        # user = endpoints.get_current_user()
+        # if not user:
+        #     raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
+        wsck = request.websafeConferenceKey
+        conf = ndb.Key(urlsafe=wsck).get()
+
+        if not conf:
+            raise endpoints.NotFoundException(
+                'No conference found with key: %s' % wsck)
+
+        # create ancestor query for all key matches for this conference
+        # and filter on typeOfSession
+        sessions = Session.query(ancestor=conf.key)
+        sessions = sessions.filter(Session.typeOfSession==request.typeOfSession)
+
+        # return set of SessionForm objects per Conference
+        return SessionForms(
+            items=[self._copySessionToForm(session) for session in sessions]
+        )
 
 api = endpoints.api_server([ConferenceApi]) # register API
