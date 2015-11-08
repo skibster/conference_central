@@ -559,9 +559,11 @@ class ConferenceApi(remote.Service):
         sf = SessionForm()
         for field in sf.all_fields():
             if hasattr(sess, field.name):
-                # convert Date to date string; just copy others
-                if field.name.endswith('date') or field.name.endswith('Time'):
+                # convert Date/Time to string; just copy others
+                if field.name.endswith('date'):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
+                elif field.name.endswith('Time'):
+                    setattr(sf, field.name, str(getattr(sess, field.name).strftime("%H:%M")))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
             elif field.name == "conferenceWebSafeKey":
