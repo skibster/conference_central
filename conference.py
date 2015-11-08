@@ -40,6 +40,7 @@ from models import Session
 from models import SessionForm
 from models import SessionForms
 from models import SessionsByType
+from models import SessionsBySpeaker
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -560,7 +561,9 @@ class ConferenceApi(remote.Service):
         sf = SessionForm()
         for field in sf.all_fields():
             if hasattr(sess, field.name):
-                # convert Date/Time to string; just copy others
+                # Convert Date to string
+                # Convert Time to string in HH:MM only
+                # else convert others as is
                 if field.name.endswith('date'):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 elif field.name.endswith('Time'):
@@ -601,9 +604,7 @@ class ConferenceApi(remote.Service):
         if data['startTime']:
             data['startTime'] = datetime.strptime(data['startTime'][:5], "%H:%M").time()
 
-        # generate Profile Key based on user ID and Conference
-        # ID based on Profile key get Conference key from ID
-        # p_key = ndb.Key(Conference, data['conferenceWebSafeKey'])
+        # generate Session ID based on Conf key, get Session key from ID
         session_id = Session.allocate_ids(size=1, parent=conf.key)[0]
         session_key = ndb.Key(Session, session_id, parent=conf.key)
         data['key'] = session_key
@@ -626,9 +627,9 @@ class ConferenceApi(remote.Service):
     def getConferenceSessions(self, request):
         """Return sessions for a Conference (by websafeConferenceKey)."""
         # make sure user is authed
-        # user = endpoints.get_current_user()
-        # if not user:
-        #     raise endpoints.UnauthorizedException('Authorization required')
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
         # user_id = getUserId(user)
         wsck = request.websafeConferenceKey
         conf = ndb.Key(urlsafe=wsck).get()
@@ -640,7 +641,7 @@ class ConferenceApi(remote.Service):
         # create ancestor query for all key matches for this conference
         sessions = Session.query(ancestor=conf.key)
 
-        # return set of SessionForm objects per Conference
+        # return set of SessionForm objects for conference
         return SessionForms(
             items=[self._copySessionToForm(session) for session in sessions]
         )
@@ -649,12 +650,12 @@ class ConferenceApi(remote.Service):
     @endpoints.method(SessionsByType, SessionForms,
             path='getConferenceSessionsByType',
             http_method='GET', name='getConferenceSessionsByType')
-    def getConferenceSessions(self, request):
+    def getConferenceSessionsByType(self, request):
         """Return sessions for a Conference by Type."""
         # make sure user is authed
-        # user = endpoints.get_current_user()
-        # if not user:
-        #     raise endpoints.UnauthorizedException('Authorization required')
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
         # user_id = getUserId(user)
         wsck = request.websafeConferenceKey
         conf = ndb.Key(urlsafe=wsck).get()
@@ -664,9 +665,31 @@ class ConferenceApi(remote.Service):
                 'No conference found with key: %s' % wsck)
 
         # create ancestor query for all key matches for this conference
-        # and filter on typeOfSession
+        # then filter on typeOfSession
+        typeOfSession = request.typeOfSession
         sessions = Session.query(ancestor=conf.key)
-        sessions = sessions.filter(Session.typeOfSession==request.typeOfSession)
+        sessions = sessions.filter(Session.typeOfSession==typeOfSession)
+
+        # return set of SessionForm objects per Conference
+        return SessionForms(
+            items=[self._copySessionToForm(session) for session in sessions]
+        )
+
+    @endpoints.method(SessionsBySpeaker, SessionForms,
+            path='getConferenceSessionsBySpeaker',
+            http_method='GET', name='getSessionsBySpeaker')
+    def getConferenceSessionsBySpeaker(self, request):
+        """Return Conference sessions by Speaker."""
+        # make sure user is authed
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
+
+        # create query for all sessions, then filter on speaker
+        speaker = request.speaker
+        sessions = Session.query()
+        sessions = sessions.filter(Session.speaker==speaker)
 
         # return set of SessionForm objects per Conference
         return SessionForms(

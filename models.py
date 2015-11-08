@@ -119,7 +119,7 @@ class Session(ndb.Model):
     typeOfSession        = ndb.StringProperty(repeated=True)
 
 class SessionForm(messages.Message):
-    """SessionForm -- Conference Session outbound form message"""
+    """SessionForm -- Conference Session inbound/outbound form message"""
     conferenceWebSafeKey = messages.StringField(1)
     date                 = messages.StringField(2) #DateTimeField()
     duration             = messages.IntegerField(3)
@@ -134,7 +134,10 @@ class SessionForms(messages.Message):
     items = messages.MessageField(SessionForm, 1, repeated=True)
 
 class SessionsByType(messages.Message):
-    """SessionByTypeForm -- Conference Sessions by Type outbound form message"""
+    """SessionByTypeForm -- Conference Sessions by Type inbound form message"""
     websafeConferenceKey = messages.StringField(1)
     typeOfSession        = messages.StringField(2)
 
+class SessionsBySpeaker(messages.Message):
+    """SessionBySpeaker -- Conference Sessions by Speaker inbound form message"""
+    speaker        = messages.StringField(1)
