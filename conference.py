@@ -36,6 +36,8 @@ from models import ConferenceForms
 from models import ConferenceQueryForm
 from models import ConferenceQueryForms
 from models import TeeShirtSize
+from models import Session
+from models import SessionForm
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -549,6 +551,57 @@ class ConferenceApi(remote.Service):
         return ConferenceForms(
             items=[self._copyConferenceToForm(conf, "") for conf in q]
         )
+
+# - - - Sessions - - - - - - - - - - - - - - - - - - - -
+    def _createSessionObject(self, request):
+        """Create a Session, returning SessionForm/request."""
+        # preload necessary data items
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        user_id = getUserId(user)
+        
+        if not request.name:
+            raise endpoints.BadRequestException("Session 'name' field required")
+
+        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
+
+        # get existing conference using web safe key
+        conf = ndb.Key(urlsafe=data['conferenceWebSafeKey']).get()
+
+        # check that conference exists
+        if not conf:
+            raise endpoints.NotFoundException(
+                'No conference found with key: %s' % data['conferenceWebSafeKey'])
+        
+        if user_id != conf.organizerUserId:
+            raise endpoints.ForbiddenException(
+                'Only the Conference owner can create sessions.')
+
+        # convert dates/times from strings to Date/Time objects
+        if data['date']:
+            data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
+        if data['startTime']:
+            data['startTime'] = datetime.strptime(data['startTime'][:5], "%H:%M").time()
+
+        # generate Profile Key based on user ID and Conference
+        # ID based on Profile key get Conference key from ID
+        # p_key = ndb.Key(Conference, data['conferenceWebSafeKey'])
+        session_id = Session.allocate_ids(size=1, parent=conf.key)[0]
+        session_key = ndb.Key(Session, session_id, parent=conf.key)
+        data['key'] = session_key
+        del data['conferenceWebSafeKey']
+        
+        # create Session
+        Session(**data).put()
+
+        return request
+
+    @endpoints.method(SessionForm, SessionForm, path='session',
+            http_method='POST', name='createSession')
+    def createSession(self, request):
+        """Create new conference session."""
+        return self._createSessionObject(request)
 
 
 api = endpoints.api_server([ConferenceApi]) # register API
