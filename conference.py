@@ -41,6 +41,7 @@ from models import SessionForm
 from models import SessionForms
 from models import SessionsByType
 from models import SessionsBySpeaker
+from models import AddSessionToWishlist
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -81,7 +82,7 @@ FIELDS =    {
 
 CONF_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
-    websafeConferenceKey=messages.StringField(1),
+    websafeConferenceKey=messages.StringField(1, required=True),
 )
 
 CONF_POST_REQUEST = endpoints.ResourceContainer(
@@ -570,6 +571,8 @@ class ConferenceApi(remote.Service):
                     setattr(sf, field.name, str(getattr(sess, field.name).strftime("%H:%M")))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
+            elif field.name == "sessionWebSafeKey":
+                setattr(sf, field.name, sess.key.urlsafe())
         sf.check_initialized()
         return sf
 
@@ -609,11 +612,53 @@ class ConferenceApi(remote.Service):
         session_key = ndb.Key(Session, session_id, parent=conf.key)
         data['key'] = session_key
         del data['conferenceWebSafeKey']
+        del data['sessionWebSafeKey']
         
         # create Session
         Session(**data).put()
 
         return request
+
+    def _SessionToWishList(self, request, add=True):
+        """Register session to user's wishlist."""
+        retval = None
+        prof = self._getProfileFromUser() # get user Profile
+
+        # check if session exists given websafeConfKey
+        # get session; check that it exists
+        session_wsck = request.sessionWebSafeKey
+        session = ndb.Key(urlsafe=session_wsck).get()
+
+        if not session:
+            raise endpoints.NotFoundException(
+                'No session found with key: %s' % session_wsck)
+
+        # add
+        if add:
+            # check if user already has session in wishlist
+            if session_wsck in prof.sessionKeysToAttend:
+                raise ConflictException(
+                    "You already have this session on your wishlist.")
+
+            # add session to wishlist
+            prof.sessionKeysToAttend.append(session_wsck)
+            retval = True
+
+        # remove
+        else:
+            # check if user already has session in wishlist
+            if session_wsck in prof.sessionKeysToAttend:
+
+                # remove session from wishlist
+                prof.sessionKeysToAttend.remove(session_wsck)
+                retval = True
+            else:
+                retval = False
+
+        # write things back to the datastore & return
+        prof.put()
+        return BooleanMessage(data=retval)
+
 
     @endpoints.method(SessionForm, SessionForm, path='session',
             http_method='POST', name='createSession')
@@ -695,5 +740,25 @@ class ConferenceApi(remote.Service):
         return SessionForms(
             items=[self._copySessionToForm(session) for session in sessions]
         )
+
+
+    @endpoints.method(AddSessionToWishlist, BooleanMessage,
+            path='sessions/addSessionToWishlist',
+            http_method='GET', name='addSessionToWishlist')
+    def addSessionToWishlist(self, request):
+        """Add session to user's wishlist."""
+        return self._SessionToWishList(request)
+
+    @endpoints.method(AddSessionToWishlist, BooleanMessage,
+            path='conference/removeSessionFromWishlist',
+            http_method='DELETE', name='removeSessionFromWishlist')
+    def removeSessionFromWishlist(self, request):
+        """Remove session to user's wishlist."""
+        return self._SessionToWishList(request, add=False)
+
+
+
+
+
 
 api = endpoints.api_server([ConferenceApi]) # register API
