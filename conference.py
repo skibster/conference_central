@@ -756,6 +756,41 @@ class ConferenceApi(remote.Service):
         """Remove session to user's wishlist."""
         return self._SessionToWishList(request, add=False)
 
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+            path='conference/sessions/wishlist',
+            http_method='GET', name='getSessionsInWishlist')
+    def getSessionsInWishlist(self, request):
+        """Get list of sessions that user has on their wishlist."""
+        prof = self._getProfileFromUser() # get user Profile
+        session_keys = [ndb.Key(urlsafe=wsck) for wsck in prof.sessionKeysToAttend]
+        sessions = ndb.get_multi(session_keys)
+
+        # return set of session objects in wishlist
+        return SessionForms(
+            items=[self._copySessionToForm(session) for session in sessions]
+        )
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+            path='sessionPlayground',
+            http_method='GET', name='sessionPlayground')
+    def sessionPlayground(self, request):
+        """Session Playground"""
+        sessions = Session.query()
+        # field = "city"
+        # operator = "="
+        # value = "London"
+        # f = ndb.query.FilterNode(field, operator, value)
+        # q = q.filter(f)
+        theStartTime = datetime.strptime("16:00", "%H:%M").time()
+        theEndTime = datetime.strptime("18:00", "%H:%M").time()
+
+        sessions = sessions.filter(Session.startTime>=theStartTime)
+        sessions = sessions.filter(Session.startTime<=theEndTime)
+        sessions = sessions.filter(Session.speaker=="Pinewood Supper Club")
+
+        return SessionForms(
+            items=[self._copySessionToForm(session) for session in sessions]
+        )
 
 
 

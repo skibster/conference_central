@@ -94,3 +94,13 @@ indexes:
   properties:
   - name: topics
   - name: name
+
+- kind: Session
+  properties:
+  - name: name
+  - name: startTime
+
+- kind: Session
+  properties:
+  - name: speaker
+  - name: startTime
