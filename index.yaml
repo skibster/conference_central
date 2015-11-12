@@ -97,6 +97,11 @@ indexes:
 
 - kind: Session
   properties:
+  - name: date
+  - name: startTime
+
+- kind: Session
+  properties:
   - name: name
   - name: startTime
 

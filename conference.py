@@ -42,6 +42,8 @@ from models import SessionForms
 from models import SessionsByType
 from models import SessionsBySpeaker
 from models import AddSessionToWishlist
+from models import FindSessionByDatewithStartTimeRange
+from models import SessionsBySpeakerOnSpecificDate
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -731,9 +733,12 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
         # user_id = getUserId(user)
 
+        wsck = request.websafeConferenceKey
+        conf = ndb.Key(urlsafe=wsck).get()
+
         # create query for all sessions, then filter on speaker
         speaker = request.speaker
-        sessions = Session.query()
+        sessions = Session.query(ancestor=conf.key)
         sessions = sessions.filter(Session.speaker==speaker)
 
         # return set of SessionForm objects per Conference
@@ -747,6 +752,10 @@ class ConferenceApi(remote.Service):
             http_method='GET', name='addSessionToWishlist')
     def addSessionToWishlist(self, request):
         """Add session to user's wishlist."""
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
         return self._SessionToWishList(request)
 
     @endpoints.method(AddSessionToWishlist, BooleanMessage,
@@ -754,6 +763,10 @@ class ConferenceApi(remote.Service):
             http_method='DELETE', name='removeSessionFromWishlist')
     def removeSessionFromWishlist(self, request):
         """Remove session to user's wishlist."""
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
         return self._SessionToWishList(request, add=False)
 
     @endpoints.method(message_types.VoidMessage, SessionForms,
@@ -761,6 +774,10 @@ class ConferenceApi(remote.Service):
             http_method='GET', name='getSessionsInWishlist')
     def getSessionsInWishlist(self, request):
         """Get list of sessions that user has on their wishlist."""
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
         prof = self._getProfileFromUser() # get user Profile
         session_keys = [ndb.Key(urlsafe=wsck) for wsck in prof.sessionKeysToAttend]
         sessions = ndb.get_multi(session_keys)
@@ -770,30 +787,81 @@ class ConferenceApi(remote.Service):
             items=[self._copySessionToForm(session) for session in sessions]
         )
 
-    @endpoints.method(message_types.VoidMessage, SessionForms,
-            path='sessionPlayground',
-            http_method='GET', name='sessionPlayground')
-    def sessionPlayground(self, request):
-        """Session Playground"""
-        sessions = Session.query()
-        # field = "city"
-        # operator = "="
-        # value = "London"
-        # f = ndb.query.FilterNode(field, operator, value)
-        # q = q.filter(f)
-        theStartTime = datetime.strptime("16:00", "%H:%M").time()
-        theEndTime = datetime.strptime("18:00", "%H:%M").time()
+    @endpoints.method(FindSessionByDatewithStartTimeRange, SessionForms,
+            path='sessions/findbydateandstarttimerange',
+            http_method='GET', name='FindSessionByDatewithStartTimeRange')
+    def FindSessionByDatewithStartTimeRange(self, request):
+        """Find Sessions By Date with Start Time Range"""
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
 
-        sessions = sessions.filter(Session.startTime>=theStartTime)
-        sessions = sessions.filter(Session.startTime<=theEndTime)
-        sessions = sessions.filter(Session.speaker=="Pinewood Supper Club")
+        sessions = Session.query()
+
+        theStartTime = datetime.strptime(request.startTimeRangeBeginning, "%H:%M").time()
+        theEndTime = datetime.strptime(request.startTimeRangeEnding, "%H:%M").time()
+        theDate = datetime.strptime(request.conferenceDate, "%Y-%m-%d").date()
+
+        sessions = sessions.filter(Session.startTime >= theStartTime)
+        sessions = sessions.filter(Session.startTime <= theEndTime)
+        sessions = sessions.filter(Session.date == theDate)
 
         return SessionForms(
             items=[self._copySessionToForm(session) for session in sessions]
         )
 
+    @endpoints.method(SessionsBySpeakerOnSpecificDate, SessionForms,
+            path='SessionsBySpeakerOnSpecificDate',
+            http_method='GET', name='SessionsBySpeakerOnSpecificDate')
+    def SessionsBySpeakerOnSpecificDate(self, request):
+        """Return Conference sessions by Speaker on a specific date."""
+        # make sure user is authed
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
 
+        # create query for all sessions, then filter on speaker
+        speaker = request.speaker
+        theDate = datetime.strptime(request.conferenceDate, "%Y-%m-%d").date()
 
+        sessions = Session.query()
+        sessions = sessions.filter(Session.speaker == request.speaker)
+        sessions = sessions.filter(Session.date == theDate)
 
+        # return set of SessionForm objects per Conference
+        return SessionForms(
+            items=[self._copySessionToForm(session) for session in sessions]
+        )
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+            path='NonWorkshopSessionsBefore7pm',
+            http_method='GET', name='NonWorkshopSessionsBefore7pm')
+    def NonWorkshopSessionsBefore7pm(self, request):
+        """Return Non-Workshop Sessions Before 7pm."""
+        # make sure user is authed
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        # user_id = getUserId(user)
+
+        theStartTime = datetime.strptime("19:00", "%H:%M").time()
+
+        # idea from reading answers from Tim Hoffman (http://stackoverflow.com/users/1201324/tim-hoffman)
+        # and Brent Washburne (http://stackoverflow.com/users/584846/brent-washburne)
+        # specifically Brent's answer here:
+        # https://stackoverflow.com/questions/33549573/combining-results-of-multiple-ndb-inequality-queries
+
+        # create two separate inequality queries and get the keys from each
+        # then use set.intersection method to get the intersection of the two sets
+        session_query1 = Session.query(Session.typeOfSession != "Workshop").fetch(keys_only=True)
+        session_query2 = Session.query(Session.startTime < theStartTime).fetch(keys_only=True)
+        sessions = ndb.get_multi(set(session_query1).intersection(session_query2))
+
+        # return set of SessionForm objects per Conference
+        return SessionForms(
+            items=[self._copySessionToForm(session) for session in sessions]
+        )
 
 api = endpoints.api_server([ConferenceApi]) # register API

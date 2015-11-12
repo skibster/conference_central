@@ -126,7 +126,7 @@ class SessionForm(messages.Message):
     date                 = messages.StringField(2) #DateTimeField()
     duration             = messages.IntegerField(3)
     highlights           = messages.StringField(4)
-    name                 = messages.StringField(5)
+    name                 = messages.StringField(5, required=True)
     speaker              = messages.StringField(6)
     startTime            = messages.StringField(7)
     typeOfSession        = messages.StringField(8, repeated=True)
@@ -138,13 +138,25 @@ class SessionForms(messages.Message):
 
 class SessionsByType(messages.Message):
     """SessionByTypeForm -- Conference Sessions by Type inbound form message"""
-    websafeConferenceKey = messages.StringField(1)
-    typeOfSession        = messages.StringField(2)
+    websafeConferenceKey = messages.StringField(1, required=True)
+    typeOfSession        = messages.StringField(2, required=True)
 
 class SessionsBySpeaker(messages.Message):
     """SessionBySpeaker -- Conference Sessions by Speaker inbound form message"""
-    speaker        = messages.StringField(1)
+    websafeConferenceKey = messages.StringField(1, required=True)
+    speaker        = messages.StringField(2, required=True)
 
 class AddSessionToWishlist(messages.Message):
     """Add/Remove Session from wishlist inbound form message"""
     sessionWebSafeKey = messages.StringField(1, required=True)
+
+class FindSessionByDatewithStartTimeRange(messages.Message):
+    """FindSessionByDatewithStartTimeRange inbound form message."""
+    conferenceDate = messages.StringField(1, required=True)
+    startTimeRangeBeginning = messages.StringField(2, required=True)
+    startTimeRangeEnding = messages.StringField(3, required=True)
+
+class SessionsBySpeakerOnSpecificDate(messages.Message):
+    """SessionBySpeaker -- Conference Sessions by Speaker inbound form message"""
+    speaker        = messages.StringField(1, required=True)
+    conferenceDate = messages.StringField(2, required=True)
