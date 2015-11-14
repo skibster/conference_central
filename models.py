@@ -123,12 +123,12 @@ class Session(ndb.Model):
 class SessionForm(messages.Message):
     """SessionForm -- Conference Session inbound/outbound form message"""
     conferenceWebSafeKey = messages.StringField(1)
-    date                 = messages.StringField(2) #DateTimeField()
+    date                 = messages.StringField(2, required=True)
     duration             = messages.IntegerField(3)
     highlights           = messages.StringField(4)
     name                 = messages.StringField(5, required=True)
     speaker              = messages.StringField(6)
-    startTime            = messages.StringField(7)
+    startTime            = messages.StringField(7, required=True)
     typeOfSession        = messages.StringField(8, repeated=True)
     sessionWebSafeKey    = messages.StringField(9)
 
@@ -160,3 +160,29 @@ class SessionsBySpeakerOnSpecificDate(messages.Message):
     """SessionBySpeaker -- Conference Sessions by Speaker inbound form message"""
     speaker        = messages.StringField(1, required=True)
     conferenceDate = messages.StringField(2, required=True)
+
+class Speaker(ndb.Model):
+    """Speaker -- Conference Session object"""
+    sessionWebSafeKey    = ndb.StringProperty(repeated=True)
+    firstName            = ndb.StringProperty(required=True)
+    lastName             = ndb.StringProperty(required=True)
+    email                = ndb.StringProperty()
+    phoneNumber          = ndb.StringProperty()
+    biography            = ndb.StringProperty()
+    companyName          = ndb.StringProperty()
+
+class SpeakerForm(messages.Message):
+    """SessionForm -- Conference Session inbound/outbound form message"""
+    firstName            = messages.StringField(1)
+    lastName             = messages.StringField(2)
+    email                = messages.StringField(3)
+    phoneNumber          = messages.StringField(4)
+    biography            = messages.StringField(5)
+    companyName          = messages.StringField(6)
+    speakerWebSafeKey    = messages.StringField(7)
+
+class SpeakerForms(messages.Message):
+    """SpeakerForms -- multiple Speaker outbound form message"""
+    items = messages.MessageField(SpeakerForm, 1, repeated=True)
+
+

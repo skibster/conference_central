@@ -44,6 +44,9 @@ from models import SessionsBySpeaker
 from models import AddSessionToWishlist
 from models import FindSessionByDatewithStartTimeRange
 from models import SessionsBySpeakerOnSpecificDate
+from models import Speaker
+from models import SpeakerForm
+from models import SpeakerForms
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
@@ -592,7 +595,10 @@ class ConferenceApi(remote.Service):
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
 
         # get existing conference using web safe key
-        conf = ndb.Key(urlsafe=data['conferenceWebSafeKey']).get()
+        try:
+            conf = ndb.Key(urlsafe=data['conferenceWebSafeKey']).get()
+        except:
+            conf = None
 
         # check that conference exists
         if not conf:
@@ -679,7 +685,10 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
         # user_id = getUserId(user)
         wsck = request.websafeConferenceKey
-        conf = ndb.Key(urlsafe=wsck).get()
+        try:
+            conf = ndb.Key(urlsafe=wsck).get()
+        except:
+            conf = None
 
         if not conf:
             raise endpoints.NotFoundException(
@@ -705,7 +714,10 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
         # user_id = getUserId(user)
         wsck = request.websafeConferenceKey
-        conf = ndb.Key(urlsafe=wsck).get()
+        try:
+            conf = ndb.Key(urlsafe=wsck).get()
+        except:
+            conf = None
 
         if not conf:
             raise endpoints.NotFoundException(
@@ -863,5 +875,76 @@ class ConferenceApi(remote.Service):
         return SessionForms(
             items=[self._copySessionToForm(session) for session in sessions]
         )
+
+
+# - - - Speaker - - - - - - - - - - - - - - - - - - - -
+
+    def _copySpeakerToForm(self, speak):
+        """Copy relevant fields from Speaker to SpeakerForm."""
+        sp = SpeakerForm()
+        for field in sp.all_fields():
+            if hasattr(speak, field.name):
+                setattr(sp, field.name, getattr(speak, field.name))
+            elif field.name == "speakerWebSafeKey":
+                setattr(sp, field.name, speak.key.urlsafe())
+        sp.check_initialized()
+        return sp
+
+    def _createSpeakerObject(self, request):
+        """Create a Speaker object."""
+        # preload necessary data items
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        user_id = getUserId(user)
+
+        if not request.firstName:
+            raise endpoints.BadRequestException("Speaker 'firstName' field required")
+        if not request.lastName:
+            raise endpoints.BadRequestException("Speaker 'lastName' field required")
+     
+        # copy ConferenceForm/ProtoRPC Message into dict
+        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
+
+        # generate Profile Key based on user ID and Conference
+        # ID based on Profile key get Conference key from ID
+        p_key = ndb.Key(Profile, user_id)
+        speaker_id = Speaker.allocate_ids(size=1, parent=p_key)[0]
+        speaker_key = ndb.Key(Speaker, speaker_id, parent=p_key)
+        data['key'] = speaker_key
+
+        # create Conference, send email to organizer confirming
+        # creation of Conference & return (modified) ConferenceForm
+        Speaker(**data).put()
+
+        return request 
+        
+
+    @endpoints.method(SpeakerForm, SpeakerForm, path='speaker',
+            http_method='POST', name='createSpeaker')
+    def createSpeaker(self, request):
+        """Create new speaker."""
+        return self._createSpeakerObject(request)
+
+    @endpoints.method(message_types.VoidMessage, SpeakerForms,
+            path='getSpeakersCreated',
+            http_method='POST', name='getSpeakersCreated')
+    def getSpeakersCreated(self, request):
+        """Return speakers created by user."""
+        # make sure user is authed
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        user_id = getUserId(user)
+        print user_id
+
+        # create ancestor query for all key matches for this user
+        speakers = Speaker.query(ancestor=ndb.Key(Profile, user_id))
+        print speakers
+        # return set of ConferenceForm objects per Conference
+        return SpeakerForms(
+            items=[self._copySpeakerToForm(speaker) for speaker in speakers]
+        )
+
 
 api = endpoints.api_server([ConferenceApi]) # register API
