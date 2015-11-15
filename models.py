@@ -110,13 +110,23 @@ class ConferenceQueryForms(messages.Message):
     """ConferenceQueryForms -- multiple ConferenceQueryForm inbound form message"""
     filters = messages.MessageField(ConferenceQueryForm, 1, repeated=True)
 
+class Speaker(ndb.Model):
+    """Speaker -- Conference Session object"""
+    firstName            = ndb.StringProperty(required=True)
+    lastName             = ndb.StringProperty(required=True)
+    email                = ndb.StringProperty()
+    phoneNumber          = ndb.StringProperty()
+    biography            = ndb.StringProperty()
+    companyName          = ndb.StringProperty()
+
 class Session(ndb.Model):
     """Session -- Conference Session object"""
     date                 = ndb.DateProperty()
     duration             = ndb.IntegerProperty()
     highlights           = ndb.StringProperty()
     name                 = ndb.StringProperty(required=True)
-    speaker              = ndb.StringProperty()
+    speaker              = ndb.KeyProperty(kind=Speaker)
+    # speakerWebSafeKey    = ndb.StringProperty()
     startTime            = ndb.TimeProperty ()
     typeOfSession        = ndb.StringProperty(repeated=True)
 
@@ -127,10 +137,11 @@ class SessionForm(messages.Message):
     duration             = messages.IntegerField(3)
     highlights           = messages.StringField(4)
     name                 = messages.StringField(5, required=True)
-    speaker              = messages.StringField(6)
-    startTime            = messages.StringField(7, required=True)
-    typeOfSession        = messages.StringField(8, repeated=True)
-    sessionWebSafeKey    = messages.StringField(9)
+    speakerWebSafeKey    = messages.StringField(6)
+    speakerName          = messages.StringField(7)
+    startTime            = messages.StringField(8, required=True)
+    typeOfSession        = messages.StringField(9, repeated=True)
+    sessionWebSafeKey    = messages.StringField(10)
 
 class SessionForms(messages.Message):
     """SessionForms -- multiple Session outbound form message"""
@@ -143,8 +154,8 @@ class SessionsByType(messages.Message):
 
 class SessionsBySpeaker(messages.Message):
     """SessionBySpeaker -- Conference Sessions by Speaker inbound form message"""
-    websafeConferenceKey = messages.StringField(1, required=True)
-    speaker        = messages.StringField(2, required=True)
+    firstName            = messages.StringField(1)
+    lastName             = messages.StringField(2, required=True)
 
 class AddSessionToWishlist(messages.Message):
     """Add/Remove Session from wishlist inbound form message"""
@@ -158,18 +169,9 @@ class FindSessionByDatewithStartTimeRange(messages.Message):
 
 class SessionsBySpeakerOnSpecificDate(messages.Message):
     """SessionBySpeaker -- Conference Sessions by Speaker inbound form message"""
-    speaker        = messages.StringField(1, required=True)
-    conferenceDate = messages.StringField(2, required=True)
-
-class Speaker(ndb.Model):
-    """Speaker -- Conference Session object"""
-    sessionWebSafeKey    = ndb.StringProperty(repeated=True)
-    firstName            = ndb.StringProperty(required=True)
-    lastName             = ndb.StringProperty(required=True)
-    email                = ndb.StringProperty()
-    phoneNumber          = ndb.StringProperty()
-    biography            = ndb.StringProperty()
-    companyName          = ndb.StringProperty()
+    firstName            = messages.StringField(1)
+    lastName             = messages.StringField(2, required=True)
+    conferenceDate       = messages.StringField(3, required=True)
 
 class SpeakerForm(messages.Message):
     """SessionForm -- Conference Session inbound/outbound form message"""
@@ -184,5 +186,3 @@ class SpeakerForm(messages.Message):
 class SpeakerForms(messages.Message):
     """SpeakerForms -- multiple Speaker outbound form message"""
     items = messages.MessageField(SpeakerForm, 1, repeated=True)
-
-

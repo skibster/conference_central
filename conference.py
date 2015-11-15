@@ -58,6 +58,7 @@ from utils import getUserId
 EMAIL_SCOPE = endpoints.EMAIL_SCOPE
 API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
+MEMCACHE_FEATURED_SPEAKER_KEY = "FEATURED_SPEAKER"
 ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
                     'are nearly sold out: %s')
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -443,6 +444,28 @@ class ConferenceApi(remote.Service):
         return announcement
 
 
+    @staticmethod
+    def _setFeaturedSpeaker(conf_key, speaker_key):
+        """Create Featured Speaker text and assign to memcache;
+        used by getFeaturedSpeaker().
+        """
+        conf = ndb.Key(urlsafe=conf_key).get()
+        speaker = ndb.Key(urlsafe=speaker_key).get()
+
+        q = Session.query(ancestor=conf.key)
+        q = q.filter(Session.speaker==speaker.key).fetch()
+
+        print "q: %s" % q
+        print len(q)
+
+        if len(q) > 1:
+            # format announcement and set it in memcache
+            featured_speaker = "For the conference: %s, %s our featured speaker is: %s!" % (conf.name, speaker.firstName, speaker.lastName)
+            memcache.set(MEMCACHE_FEATURED_SPEAKER_KEY, featured_speaker)
+        else:
+            featured_speaker = None
+        return featured_speaker
+
     @endpoints.method(message_types.VoidMessage, StringMessage,
             path='conference/announcement/get',
             http_method='GET', name='getAnnouncement')
@@ -564,6 +587,7 @@ class ConferenceApi(remote.Service):
 # - - - Sessions - - - - - - - - - - - - - - - - - - - -
     def _copySessionToForm(self, sess):
         """Copy relevant fields from Session to SessionForm."""
+        print "my Sess: %s" % sess
         sf = SessionForm()
         for field in sf.all_fields():
             if hasattr(sess, field.name):
@@ -578,6 +602,13 @@ class ConferenceApi(remote.Service):
                     setattr(sf, field.name, getattr(sess, field.name))
             elif field.name == "sessionWebSafeKey":
                 setattr(sf, field.name, sess.key.urlsafe())
+            elif field.name == "speakerName":
+                try:
+                    speaker = sess.speaker.get()
+                    speakerName = "%s %s" %(getattr(speaker, "firstName"), getattr(speaker, "lastName"))
+                    setattr(sf, 'speakerName', speakerName)
+                except:
+                    pass
         sf.check_initialized()
         return sf
 
@@ -609,6 +640,13 @@ class ConferenceApi(remote.Service):
             raise endpoints.ForbiddenException(
                 'Only the Conference owner can create sessions.')
 
+        # get existing conference using web safe key
+        try:
+            speaker = ndb.Key(urlsafe=data['speakerWebSafeKey']).get()
+            data['speaker'] = speaker.key
+        except:
+            speaker = None
+
         # convert dates/times from strings to Date/Time objects
         if data['date']:
             data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
@@ -621,9 +659,18 @@ class ConferenceApi(remote.Service):
         data['key'] = session_key
         del data['conferenceWebSafeKey']
         del data['sessionWebSafeKey']
+        del data['speakerName']
+        del data['speakerWebSafeKey']
         
         # create Session
         Session(**data).put()
+
+        # add a task to see if this new session creates a featured speaker
+        taskqueue.add(params={'websafeConferenceKey': conf.key.urlsafe(),
+            'websafeSpeakerKey': speaker.key.urlsafe()},
+            url    = '/tasks/set_featured_speaker',
+            method = 'GET'
+        )
 
         return request
 
@@ -745,17 +792,30 @@ class ConferenceApi(remote.Service):
             raise endpoints.UnauthorizedException('Authorization required')
         # user_id = getUserId(user)
 
-        wsck = request.websafeConferenceKey
-        conf = ndb.Key(urlsafe=wsck).get()
+        sp_lastName = request.lastName
+        sp_firstName = request.firstName
 
-        # create query for all sessions, then filter on speaker
-        speaker = request.speaker
-        sessions = Session.query(ancestor=conf.key)
-        sessions = sessions.filter(Session.speaker==speaker)
+        if sp_firstName:
+            # find by first and last name
+            speaker = Speaker.query(ndb.AND(
+                Speaker.lastName==sp_lastName,
+                Speaker.firstName==sp_firstName))
+        else:
+            # find by last name only
+            speaker = Speaker.query(Speaker.lastName==sp_lastName)
 
-        # return set of SessionForm objects per Conference
+        speaker_keys = [sp.key for sp in speaker]
+
+        # iterate over each key finding all sessions
+        all_sessions = []
+        for sp_k in speaker_keys:
+            sessions = Session.query(Session.speaker==sp_k)
+            for s in sessions:
+                all_sessions.append(s)
+
+        # return list of sessions that match each of the speaker_keys
         return SessionForms(
-            items=[self._copySessionToForm(session) for session in sessions]
+            items=[self._copySessionToForm(sess) for sess in all_sessions]
         )
 
 
@@ -828,23 +888,42 @@ class ConferenceApi(remote.Service):
             http_method='GET', name='SessionsBySpeakerOnSpecificDate')
     def SessionsBySpeakerOnSpecificDate(self, request):
         """Return Conference sessions by Speaker on a specific date."""
+
+
         # make sure user is authed
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
         # user_id = getUserId(user)
 
-        # create query for all sessions, then filter on speaker
-        speaker = request.speaker
+        sp_lastName = request.lastName
+        sp_firstName = request.firstName
         theDate = datetime.strptime(request.conferenceDate, "%Y-%m-%d").date()
 
-        sessions = Session.query()
-        sessions = sessions.filter(Session.speaker == request.speaker)
-        sessions = sessions.filter(Session.date == theDate)
 
-        # return set of SessionForm objects per Conference
+        if sp_firstName:
+            # find by first and last name
+            speaker = Speaker.query(ndb.AND(
+                Speaker.lastName==sp_lastName,
+                Speaker.firstName==sp_firstName))
+        else:
+            # find by last name only
+            speaker = Speaker.query(Speaker.lastName==sp_lastName)
+
+        speaker_keys = [sp.key for sp in speaker]
+
+        # iterate over each key finding all sessions
+        all_sessions = []
+        for sp_k in speaker_keys:
+            sessions = Session.query(ndb.AND(
+                Session.speaker==sp_k,
+                Session.date == theDate))
+            for s in sessions:
+                all_sessions.append(s)
+
+        # return list of sessions that match each of the speaker_keys
         return SessionForms(
-            items=[self._copySessionToForm(session) for session in sessions]
+            items=[self._copySessionToForm(sess) for sess in all_sessions]
         )
 
     @endpoints.method(message_types.VoidMessage, SessionForms,
@@ -912,13 +991,14 @@ class ConferenceApi(remote.Service):
         speaker_id = Speaker.allocate_ids(size=1, parent=p_key)[0]
         speaker_key = ndb.Key(Speaker, speaker_id, parent=p_key)
         data['key'] = speaker_key
+        del data['speakerWebSafeKey']
 
         # create Conference, send email to organizer confirming
         # creation of Conference & return (modified) ConferenceForm
         Speaker(**data).put()
 
         return request 
-        
+
 
     @endpoints.method(SpeakerForm, SpeakerForm, path='speaker',
             http_method='POST', name='createSpeaker')
@@ -936,11 +1016,10 @@ class ConferenceApi(remote.Service):
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
         user_id = getUserId(user)
-        print user_id
 
         # create ancestor query for all key matches for this user
         speakers = Speaker.query(ancestor=ndb.Key(Profile, user_id))
-        print speakers
+
         # return set of ConferenceForm objects per Conference
         return SpeakerForms(
             items=[self._copySpeakerToForm(speaker) for speaker in speakers]
