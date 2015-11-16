@@ -27,6 +27,7 @@ App Engine application for the Udacity training course.
 
 ## Application Data Model
 This application contains the following data models:
+
 1. **Profile** - This model houses information about the logged in user. Certain functions like creating speakers and sessions for conferences is governed by which user created the data object. The following data is housed in the Profile model:
     * *displayName* - the user specified name to display in the application.
     * *mainEmail* - the user's email as determined by Google authentication.
