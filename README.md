@@ -68,6 +68,7 @@ The following endpoints are available to users:
 ### Profile
   * getProfile - get user's profile
   * saveProfile - modify user's profile and save
+
 ### Conference
   * createConference - create a new conference
   * filterPlayground - hard coded filter routine (for development only)
@@ -78,10 +79,12 @@ The following endpoints are available to users:
   * registerForConference - register for a conference using the webSafeConferenceKey
   * unregisterForConference - unregister for a conference using the webSafeConferenceKey
   * updateConference - update a conference with new data fields using the webSafeConferenceKey
+
 ### Speaker
   * createSpeaker - creata a speaker who will be referenced as a speaker for a particular session
   * getFeaturedSpeaker - when the same speaker speaks in more than one session at a conference, that speaker is considered the featured speaker. Featured speaker is generated using a task queue at the time sessions are created (**Rubric: Task 4**)
   * getSpeakersCreated - get a list of speakers the user has created
+
 ### Session
   * addSessionToWishlist - add a particular session to the user's wishlist using the sessionWebSafeKey
   * createSession - create a session for a particular conference using the conferenceWebSafe Key and speakerWebSafeKey
