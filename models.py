@@ -136,12 +136,12 @@ class Speaker(ndb.Model):
 
 class Session(ndb.Model):
     """Session -- Conference Session object"""
-    date = ndb.DateProperty()
+    date = ndb.DateProperty(required=True)
     duration = ndb.IntegerProperty()
     highlights = ndb.StringProperty()
     name = ndb.StringProperty(required=True)
     speaker = ndb.KeyProperty(kind=Speaker)
-    startTime = ndb.TimeProperty()
+    startTime = ndb.TimeProperty(required=True)
     typeOfSession = ndb.StringProperty(repeated=True)
 
 

@@ -385,10 +385,10 @@ class ConferenceApi(remote.Service):
         profile = p_key.get()
         # create new Profile if not there
         if not profile:
-            profiles = Profile(key=p_key,
-                               displayName=user.nickname(),
-                               mainEmail=user.email(),
-                               teeShirtSize=str(TeeShirtSize.NOT_SPECIFIED),)
+            profile = Profile(key=p_key,
+                              displayName=user.nickname(),
+                              mainEmail=user.email(),
+                              teeShirtSize=str(TeeShirtSize.NOT_SPECIFIED),)
             profile.put()
 
         return profile      # return Profile
